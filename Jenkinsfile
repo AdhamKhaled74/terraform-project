@@ -6,7 +6,7 @@ pipeline {
         ECR_REPO_NAME      = 'shopflow-app'
         TF_VAR_db_password = credentials('shopflow-db-password')
         IMAGE_TAG          = "${env.BUILD_NUMBER}"
-        TF_IMAGE           = 'hashicorp/terraform:1.9'
+        TF_IMAGE           = 'hashicorp/terraform:1.10'
     }
 
     stages {
