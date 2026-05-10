@@ -23,6 +23,12 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
+            agent {
+                docker{
+                    image 'amazon/aws-cli'
+                    reuseNode true
+                }
+            }
             steps {
                 script {
                     def accountId = sh(
