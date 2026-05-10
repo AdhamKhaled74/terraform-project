@@ -2,15 +2,14 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION          = 'us-east-1'
-        ECR_REPO_NAME       = 'shopflow-app'
-        TF_VAR_db_password  = credentials('shopflow-db-password')
-        IMAGE_TAG           = "${env.BUILD_NUMBER}"
+        AWS_REGION         = 'us-east-1'
+        ECR_REPO_NAME      = 'shopflow-app'
+        TF_VAR_db_password = credentials('shopflow-db-password')
+        IMAGE_TAG          = "${env.BUILD_NUMBER}"
     }
 
     stages {
 
-        // ── Stage 1: Lint ──────────────────────────────────────────────────
         stage('Lint') {
             steps {
                 sh '''
@@ -23,33 +22,30 @@ pipeline {
             }
         }
 
-        // ── Stage 2: Docker Build & Push to ECR ───────────────────────────
         stage('Docker Build & Push') {
             steps {
                 script {
                     def accountId = sh(
-                        script: "aws sts get-caller-identity --query Account --output text",
+                        script: 'aws sts get-caller-identity --query Account --output text',
                         returnStdout: true
                     ).trim()
 
                     env.ECR_REGISTRY = "${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                    env.IMAGE_URI    = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
-                    env.IMAGE_LATEST = "${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
+                    env.IMAGE_URI    = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
+                    env.IMAGE_LATEST = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
 
                     sh """
                         aws ecr get-login-password --region ${AWS_REGION} \\
-                            | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                            | docker login --username AWS --password-stdin ${env.ECR_REGISTRY}
 
-                        docker build -t ${IMAGE_URI} -t ${IMAGE_LATEST} .
-
-                        docker push ${IMAGE_URI}
-                        docker push ${IMAGE_LATEST}
+                        docker build -t ${env.IMAGE_URI} -t ${env.IMAGE_LATEST} .
+                        docker push ${env.IMAGE_URI}
+                        docker push ${env.IMAGE_LATEST}
                     """
                 }
             }
         }
 
-        // ── Stage 3: Terraform Validate & Plan ────────────────────────────
         stage('Terraform Plan') {
             steps {
                 sh '''
@@ -66,7 +62,6 @@ pipeline {
             }
         }
 
-        // ── Stage 4: Manual Approval ───────────────────────────────────────
         stage('Approval') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
@@ -76,28 +71,24 @@ pipeline {
             }
         }
 
-        // ── Stage 5: Terraform Apply ───────────────────────────────────────
         stage('Deploy') {
             steps {
-                sh '''
-                    terraform apply -input=false -auto-approve tfplan
-                '''
+                sh 'terraform apply -input=false -auto-approve tfplan'
             }
         }
 
-        // ── Stage 6: Smoke Test ────────────────────────────────────────────
         stage('Smoke Test') {
             steps {
                 script {
-                    def albDns = sh(
-                        script: "terraform output -raw alb_dns_name",
+                    env.ALB_DNS = sh(
+                        script: 'terraform output -raw alb_dns_name',
                         returnStdout: true
                     ).trim()
 
                     sh """
-                        echo "Waiting for ALB to become healthy..."
+                        echo "Waiting for ALB to become healthy at ${env.ALB_DNS}..."
                         for i in \$(seq 1 12); do
-                            STATUS=\$(curl -s -o /dev/null -w '%{http_code}' http://${albDns} || echo '000')
+                            STATUS=\$(curl -s -o /dev/null -w '%{http_code}' http://${env.ALB_DNS} || echo '000')
                             echo "Attempt \$i: HTTP \$STATUS"
                             if [ "\$STATUS" = "200" ]; then
                                 echo "Smoke test passed."
@@ -115,10 +106,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully. ALB: \$(terraform output -raw alb_dns_name)"
+            echo "Pipeline completed successfully. ALB: ${env.ALB_DNS ?: 'n/a'}"
         }
         failure {
-            echo "Pipeline failed. Check logs above for details."
+            echo 'Pipeline failed. Check logs above for details.'
         }
         always {
             sh 'docker system prune -f || true'
