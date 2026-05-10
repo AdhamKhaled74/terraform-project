@@ -24,24 +24,38 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
-                script {
-                    def accountId = sh(
-                        script: 'docker run --rm -e AWS_REGION -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN amazon/aws-cli sts get-caller-identity --query Account --output text',
-                        returnStdout: true
-                    ).trim()
+                withCredentials([usernamePassword(
+                    credentialsId: 'my-aws',
+                    usernameVariable: 'AWS_ACCESS_KEY_ID',
+                    passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                )]) {
+                    script {
+                        def accountId = sh(
+                            script: '''
+                                docker run --rm \
+                                    -e AWS_REGION \
+                                    -e AWS_ACCESS_KEY_ID \
+                                    -e AWS_SECRET_ACCESS_KEY \
+                                    -e AWS_SESSION_TOKEN \
+                                    amazon/aws-cli sts get-caller-identity \
+                                    --query Account --output text
+                            ''',
+                            returnStdout: true
+                        ).trim()
 
-                    env.ECR_REGISTRY = "${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                    env.IMAGE_URI    = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
-                    env.IMAGE_LATEST = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
+                        env.ECR_REGISTRY = "${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                        env.IMAGE_URI    = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
+                        env.IMAGE_LATEST = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
 
-                    sh """
-                        aws ecr get-login-password --region ${AWS_REGION} \\
-                            | docker login --username AWS --password-stdin ${env.ECR_REGISTRY}
+                        sh """
+                            aws ecr get-login-password --region ${AWS_REGION} \\
+                                | docker login --username AWS --password-stdin ${env.ECR_REGISTRY}
 
-                        docker build -t ${env.IMAGE_URI} -t ${env.IMAGE_LATEST} .
-                        docker push ${env.IMAGE_URI}
-                        docker push ${env.IMAGE_LATEST}
-                    """
+                            docker build -t ${env.IMAGE_URI} -t ${env.IMAGE_LATEST} .
+                            docker push ${env.IMAGE_URI}
+                            docker push ${env.IMAGE_LATEST}
+                        """
+                    }
                 }
             }
         }
