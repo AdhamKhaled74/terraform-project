@@ -8,9 +8,24 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
+resource "tls_private_key" "main" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
 resource "aws_key_pair" "main" {
   key_name   = "${var.project_name}-${var.environment}-key"
-  public_key = file("~/.ssh/id_rsa.pub")
+  public_key = tls_private_key.main.public_key_openssh
+}
+
+# Store private key in SSM so you can retrieve it for SSH access:
+# aws ssm get-parameter --name /shopflow/dev/bastion-private-key --with-decryption --query Parameter.Value --output text > bastion.pem
+resource "aws_ssm_parameter" "bastion_key" {
+  name  = "/${var.project_name}/${var.environment}/bastion-private-key"
+  type  = "SecureString"
+  value = tls_private_key.main.private_key_pem
+
+  tags = { Name = "${var.project_name}-${var.environment}-bastion-key" }
 }
 
 # Security Group — Bastion Host
