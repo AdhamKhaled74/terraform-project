@@ -23,16 +23,10 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
-            agent {
-                docker{
-                    image 'amazon/aws-cli'
-                    reuseNode true
-                }
-            }
             steps {
                 script {
                     def accountId = sh(
-                        script: 'aws sts get-caller-identity --query Account --output text',
+                        script: 'docker run -rm amazon/aws-cli aws sts get-caller-identity --query Account --output text',
                         returnStdout: true
                     ).trim()
 
