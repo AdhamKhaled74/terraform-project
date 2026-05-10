@@ -30,6 +30,7 @@ pipeline {
                     passwordVariable: 'AWS_SECRET_ACCESS_KEY'
                 )]) {
                     script {
+                        // Get AWS account ID via containerized AWS CLI
                         def accountId = sh(
                             script: '''
                                 docker run --rm \
@@ -46,8 +47,13 @@ pipeline {
                         env.IMAGE_URI    = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
                         env.IMAGE_LATEST = "${env.ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
 
+                        // ECR login via containerized AWS CLI, piped to host docker
                         sh """
-                            aws ecr get-login-password --region ${AWS_REGION} \\
+                            docker run --rm \\
+                                -e AWS_REGION \\
+                                -e AWS_ACCESS_KEY_ID \\
+                                -e AWS_SECRET_ACCESS_KEY \\
+                                amazon/aws-cli ecr get-login-password --region ${AWS_REGION} \\
                                 | docker login --username AWS --password-stdin ${env.ECR_REGISTRY}
 
                             docker build -t ${env.IMAGE_URI} -t ${env.IMAGE_LATEST} .
