@@ -26,7 +26,7 @@ pipeline {
             steps {
                 script {
                     def accountId = sh(
-                        script: 'docker run -rm amazon/aws-cli aws sts get-caller-identity --query Account --output text',
+                        script: 'docker run --rm -e AWS_REGION -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN amazon/aws-cli sts get-caller-identity --query Account --output text',
                         returnStdout: true
                     ).trim()
 
